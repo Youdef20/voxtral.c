@@ -14,7 +14,7 @@
   streaming with KV cache compaction). This is slow (~2 min), so only run it as
   the final check before each commit
 
-## Current Baseline (2026-02-06)
+## Current Baseline (2026-02-06 / MacBook Pro M3 Max, 128 GB of RAM)
 - Decoder: 23.5 ms/token (was 43.2 at start)
 - Prefill: ~252ms (was ~1200ms)
 - Encoder: ~284ms (test_speech.wav, 3.6s audio), ~539ms (jfk.wav, 11s audio) (was ~2.7s at start)
@@ -171,7 +171,7 @@
   - First encoder call has ~50ms warmup overhead (MPS pipeline JIT)
 - Prefill: ~252ms (improved from ~335ms)
 
-## MLX Credits
-- If any optimization ideas or kernel code are taken from Apple MLX
-  (https://github.com/ml-explore/mlx), proper credits must be added to
-  both the README and the relevant source file.
+## Credits attribution rules
+- Ideas / kernels / approaches should be only taken from BSD / MIT licensed code.
+- If any optimization ideas or kernel code are taken from some other project,
+  proper credits must be added to both the README and the relevant source file.
