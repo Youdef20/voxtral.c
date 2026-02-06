@@ -14,12 +14,13 @@
   streaming with KV cache compaction). This is slow (~2 min), so only run it as
   the final check before each commit
 
-## Current Baseline (2026-02-06 / MacBook Pro M3 Max, 128 GB of RAM)
+## Current Baseline (2026-02-06 / MacBook Pro M3 Max 40-core GPU, 128 GB, 400 GB/s)
 - Decoder: 23.5 ms/token (was 43.2 at start)
 - Prefill: ~252ms (was ~1200ms)
 - Encoder: ~284ms (test_speech.wav, 3.6s audio), ~539ms (jfk.wav, 11s audio) (was ~2.7s at start)
-- Theoretical decoder floor: ~23 ms/token (300 GB/s bandwidth, 6.9 GB weights)
-- Remaining decoder overhead: 1 command buffer per token
+- Theoretical decoder floor: ~17.3 ms/token (6.9 GB weights / 400 GB/s = 17.25 ms)
+- Current efficiency: 73% of bandwidth limit (17.3 / 23.5)
+- Remaining decoder overhead: ~6.2 ms/token above theoretical floor
 
 ## Already Optimized
 - Fused QKV: 3 matmuls → 1 command buffer (saves 52 round-trips/token)
@@ -163,13 +164,68 @@
 - **Result: jfk encoder 700 → 539ms (23% faster, attention-dominated)**
 - **Cumulative encoder: 2.7s → 284ms (test_speech, 89% faster), 539ms (jfk)**
 
+### Attempt 15: Custom SMA GEMM for prefill (FAILED)
+- Wrote custom Metal GEMM kernel using simdgroup_multiply_accumulate (SMA)
+- Target: replace MPS matmul for small-M prefill (M=37, 104 matmuls × 26 layers)
+- BM=8, BN=32, BK=8 tiles, 4 simdgroups per threadgroup (128 threads)
+- Key findings:
+  - `thread_elements()` mapping is implementation-defined — manual indexing produces wrong results
+  - Must use `simdgroup_load()`/`simdgroup_store()` for correct matrix I/O (Metal 3.0)
+  - Transposed B loads (`simdgroup_load(..., transpose=true)`) have poor memory coalescing
+  - f32→f16 conversion in inner loop adds ~20% overhead (tried barrier-free f16 variant, no help)
+  - Monolithic compute encoder (1 for all 26 layers) didn't reduce overhead vs separate encoders
+- **Result: ~300ms vs MPS ~252ms (20% SLOWER). Reverted.**
+- Conclusion: MPS matmul's optimized tiling and memory access patterns are hard to beat.
+  Custom GEMM would need pre-transposed weights for good coalescing, not worth the complexity.
+
+### Attempt 16: exp2() for softmax (FAILED)
+- Changed exp() to exp2(x * M_LOG2E_F) in decoder_attention, encoder_attention, causal_softmax
+- No measurable improvement — Apple GPU already optimizes exp() internally
+- Attention kernels are memory-bandwidth-bound, not compute-bound
+- **Result: no change. Reverted.**
+
+### Attempt 17: beta=1.0 fused residual in prefill/encoder (FAILED)
+- Changed wo and w2 matmuls to beta=1.0 (C = A@B^T + C), eliminating add_inplace dispatches
+- Removed bufProj and bufFfnOut buffers (fewer allocations)
+- Applied to both decoder prefill and encoder monolithic step
+- **Result: no measurable speed improvement. Reverted.**
+
+### Attempt 18: f16 encoder activations (FAILED)
+- Convert f32 activations to f16 before each MPS matmul in encoder (4 conversions/layer)
+- Theory: f16×f16 enables f16 compute path (~28 TFLOPS vs 14 TFLOPS f32)
+- Added f32_to_f16 Metal shader, allocated f16 input buffers, changed MPS descriptors
+- Conversion overhead is negligible (~1ms total for all 32 layers)
+- MPS matmul with f16 inputs produces correct results
+- **Result: test_speech 283→266ms (within noise), jfk 526→538ms (no improvement). Reverted.**
+- Conclusion: MPS likely already uses f16 hardware internally regardless of input type.
+  The f32→f16 conversion adds overhead without unlocking faster compute.
+
+### Attempt 19: Custom SMA GEMM with pre-transposed weights (FAILED)
+- Pre-transpose encoder weights [N, K] → [K, N] at load time (perfect memory coalescing)
+- Custom Metal GEMM kernel using simdgroup_multiply_accumulate (SMA)
+- BM=8, BN=32, 4 simdgroups per threadgroup, simdgroup_load/store for correct I/O
+- First version: f32 A × f16 B → uses slow f32×f32 SMA path (40% slower than MPS)
+- Second version: convert A to f16 in threadgroup memory → f16×f16→f32 SMA (still 40% slower)
+- **Result: encoder 283→375-445ms. Even worse than attempt 15 for prefill.**
+- Root cause: 8×8 tiles are too small — MPS uses much larger tiles (64×64+) with prefetching,
+  double-buffering, and vectorized loads. Writing a competitive GEMM requires production-level
+  tiling (32×32+) and memory pipeline optimization — not worth the complexity.
+
+### Analysis: Encoder efficiency at MPS limit
+- MPS matmul achieves ~4.5 TFLOPS (32% of peak f32) for encoder dimensions (M=100-200)
+- Remaining overhead per encoder call: ~50ms first-call warmup (MPS pipeline JIT), ~5ms for
+  compute shaders (norm, bias, RoPE, attention), ~3ms CPU-side MPS encoding
+- Using `-I 100` (fewer, larger encoder calls) improves jfk from 526→433ms (18% faster)
+  by reducing command buffer commits and improving GPU utilization at larger M
+- Further encoder optimization would require either:
+  1. INT4/INT8 weight quantization (reduces bandwidth, but MPS doesn't support natively)
+  2. MLX-level optimized GEMM kernels (production-quality tiling, significant engineering)
+  3. Fundamentally different architecture (e.g., speculative decoding, pipeline parallelism)
+
 ### Next targets
-- Decoder: ~23.5 ms/step, theoretical floor ~23 ms (0.5ms gap, near bandwidth limit)
-- Encoder: ~284ms (test_speech), ~539ms (jfk)
-  - Matmul fixed cost: ~18ms per 100-position call (at 3.5 TFLOPS, ~25% of peak)
-  - Attention now 0.058ms/KV_pos (was 0.133ms), still has room for improvement
-  - First encoder call has ~50ms warmup overhead (MPS pipeline JIT)
-- Prefill: ~252ms (improved from ~335ms)
+- Decoder: ~23.5 ms/step, theoretical floor ~17.3 ms — **73% bandwidth efficiency, 6.2 ms headroom**
+- Encoder: ~284ms (test_speech), ~539ms (jfk) — **at MPS matmul efficiency limit**
+- Prefill: ~252ms — **at MPS matmul efficiency limit for M=38**
 
 ## Credits attribution rules
 - Ideas / kernels / approaches should be only taken from BSD / MIT licensed code.
